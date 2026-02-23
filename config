@@ -31,7 +31,7 @@
   -- Update Listings on Redstone (restock button)
   redstoneTriggersStockCalculations = false,
 
-  kristEndpoint = "https://krist.dev",
+  kristEndpoint = "https://kromer.reconnected.cc/api/krist",
 
   -- Apply the given theme to term
   applyThemeToTerm = true,
