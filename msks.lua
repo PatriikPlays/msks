@@ -98,8 +98,8 @@ for k,v in ipairs(listings) do
     assert(v.metaname ~= "", "Item "..v.label.." has a name, but an empty metaname")
     v.name = nameToUse
     v.sendTo = v.metaname.."@"..v.name
-    if v.name:sub(-4) ~= ".kst" then
-      print(("WARNING: the name being used for %s is %s, this might be missing .kst"):format(v.id, v.name))
+    if v.name:sub(-4) ~= ".kro" then
+      print(("WARNING: the name being used for %s is %s, this might be missing .kro"):format(v.id, v.name))
     end
     assert(not listingAddressLUT[v.sendTo], "Duplicate metaname for item "..v.label.." "..nameToUse)
     listingAddressLUT[v.sendTo] = v
@@ -137,7 +137,7 @@ local function drawMonitor()
 
   local space = math.floor((({monitor.getSize()})[1] - 14) / 2)
   local formatStr = "%-5s|%-"..space.."s|%-"..space.."s|%-5s"
-  monitor.write(string.format(formatStr, "Stock", "Name", "Address", "KST/I"))
+  monitor.write(string.format(formatStr, "Stock", "Name", "Address", "KRO/I"))
 
   monitor.bg(theme.bg)
   monitor.fg(theme.text)
@@ -170,7 +170,7 @@ local function handlePurchase(listing, from, event)
   })
   os.queueEvent("rerender")
 
-  local refund = math.floor(event.value - (itemsDispensed * listing.price))
+  local refund = math.floor((event.value - (itemsDispensed * listing.price))*100)/100
 
   if refund > 0 then
     local refundStatus, err = krist.makeTransaction(from, refund)
