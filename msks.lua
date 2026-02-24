@@ -8,6 +8,25 @@
 -- The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+local function tc(...)
+  local t = {...}
+
+  local value = table.remove(t, 1)
+  local errorMessage = table.remove(t, #t)
+  local types = t
+
+  local isValid = false
+  for _, v in ipairs(types) do
+    if type(value) == v then
+      isValid = true
+      break
+    end
+  end
+
+  if isValid then return end
+
+  error(string.format("%s (found %s, expected %s)", tostring(errorMessage), type(value), table.concat(types, "|")))
+end
 
 local configFile = assert(fs.open("config", "r"), "Unable to open config file!")
 local config = assert(textutils.unserialise(configFile.readAll()), "Unable to unserialize config")
@@ -20,6 +39,31 @@ local monitor = peripheral.wrap(config.monitor)
 assert(monitor, "Config provides invalid monitor")
 assert(config.turtle and config.turtle ~= "", "Config provides no turtle address on network")
 
+config.shopsync = config.shopsync or {}
+assert(not config.shopsync or type(config.shopsync) == "table", "Shopsync config invalid")
+
+print(config.shopsync.enabled and "Shopsync is enabled" or "Shopsync is disabled")
+if config.shopsync.enabled then
+  tc(config.shopsync.name, "string", "config.shopsync.name")
+
+  tc(config.shopsync.x, "number", "config.shopsync.x") -- these arent necessary, but shops that dont transmit them are evil.
+  tc(config.shopsync.y, "number", "config.shopsync.y")
+  tc(config.shopsync.z, "number", "config.shopsync.z")
+end
+
+local shopsyncModem
+
+if not config.shopsync.shopsyncModem then
+  local m = peripheral.find("modem", function(name)
+    return peripheral.call(name, "isWireless")
+  end)
+
+  assert(m, "No wireless modems found for shopsync")
+
+  shopsyncModem = m
+else
+  shopsyncModem = assert(peripheral.wrap(config.shopsync.shopsyncModem), "Configured shopsync modem not found")
+end
 
 local krist = require("ktwsl")(config.kristEndpoint, config.privateKey)
 
@@ -116,6 +160,54 @@ local f = fs.open("test.out","w")
 f.write(textutils.serialise(listings))
 f.close()
 
+local function sendShopsync()
+  local packet = {}
+  packet.type = "ShopSync"
+  packet.version = 1
+  packet.info = {}
+  packet.info.name = config.shopsync.name
+  packet.info.description = config.shopsync.description
+  packet.info.owner = config.shopsync.owner
+  packet.info.computerID = os.getComputerID()
+  packet.info.software = {}
+  packet.info.software.name = "msks"
+
+  packet.info.location = {}
+  packet.info.location.coordinates = {config.shopsync.x, config.shopsync.y, config.shopsync.z}
+  packet.info.location.description = config.shopsync.locationDescription
+  packet.info.location.dimension = config.shopsync.locationDimension
+
+  packet.items = {}
+
+  for k, v in pairs(listings) do
+    local count = invCache.getCount(v.id,v.nbt)
+
+    table.insert(packet.items, {
+      prices = {
+        {
+          value = v.price,
+          currency = "KRO",
+          address = v.sendTo,
+          requiredMeta = nil
+        }
+      },
+      item = {
+        name = v.id,
+        nbt = v.nbt,
+        displayName = v.label,
+        description = nil
+      },
+      stock = count,
+      madeOnDemand = false,
+      requiresInteraction = false
+    })
+  end
+
+  print("Transmitting shopsync")
+  shopsyncModem.transmit(9773, os.getComputerID() % 65536, packet)
+end
+
+
 monitor.bg = monitor.setBackgroundColor
 monitor.fg = monitor.setTextColor
 monitor.c = monitor.setCursorPos
@@ -158,7 +250,6 @@ local function drawMonitor()
 end
 
 
-
 --- This function is only called if the purchase is to a valid listing
 local function handlePurchase(listing, from, event)
   local itemsToDispense = math.floor(event.value / listing.price)
@@ -170,6 +261,8 @@ local function handlePurchase(listing, from, event)
     end,
   })
   os.queueEvent("rerender")
+
+  sendShopsync()
 
   local refund = math.floor((event.value - (itemsDispensed * listing.price))*100)/100
 
@@ -230,8 +323,22 @@ function ()
       drawMonitor()
     elseif event == "redstone" and config.redstoneTriggersStockCalculations then
       invCache.refreshStorage(true)
+      -- sendShopsync() -- we dont send shopsync here, because this is broken and the flasher lamp triggers this every time it flashes, maybe consider fixing later
       drawMonitor()
     end
+  end
+end, function ()
+  while true do
+    rs.setOutput("left",true)
+    os.sleep(1)
+    rs.setOutput("left",false)
+    os.sleep(1)
+  end
+end, function()
+  sleep(5)
+  while true do
+    sendShopsync()
+    sleep(60) -- this isnt according to the spec, however i believe it makes sense
   end
 end)
 

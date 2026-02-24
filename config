@@ -1,5 +1,5 @@
 {
-  -- Default address to use for transactions and returns 
+  -- Default address to use for transactions and returns
   -- Needs to be the address of privateKey
   -- AND the address of the name, if applicable
   address = "",
@@ -65,6 +65,18 @@
   -- Speaker to play sounds on
   -- nil for no sounds
   speaker = nil,
+
+  shopsync = {
+    enabled = false,
+    name = "my cool shop",
+    description = "a shop", -- can be nil
+    owner = "mee", -- can be nil
+    x = 100,
+    y = 90,
+    z = 80,
+    locationDescription = "here", -- can be nil
+    locationDimension = "overworld" -- "overworld", "nether", or "end", can be nil
+  }
 
   sounds = {
     itemDispensed = "block.dispenser.dispense",
